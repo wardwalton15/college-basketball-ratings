@@ -1,0 +1,44 @@
+# Daily Data Refresh Workflow (Phase 2)
+# This workflow will be activated in Phase 2 for automated daily updates
+
+name: Daily Data Refresh
+
+on:
+  # Scheduled run at 10 AM UTC daily (during basketball season)
+  schedule:
+    - cron: '0 10 * * *'
+
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  refresh-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          cd api
+          pip install -r requirements.txt
+
+      - name: Fetch and update data
+        env:
+          CBBD_API_KEY: ${{ secrets.CBBD_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cd api
+          python fetch_data.py
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Data refresh failed!"
+        # In Phase 2, add notification service here (email, Slack, etc.)

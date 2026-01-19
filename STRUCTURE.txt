@@ -1,0 +1,255 @@
+College Basketball Ratings - Project Structure
+===============================================
+
+college-basketball-ratings/
+│
+├── api/                                    # Backend (Python/Flask)
+│   ├── app.py                             # Flask API server with 5 endpoints
+│   ├── fetch_data.py                      # CBBD API integration & data fetching
+│   ├── calculate_ratings.py               # Rating calculation engine (Four Factors)
+│   └── requirements.txt                   # Python dependencies (Flask, cbbd, etc.)
+│
+├── frontend/                               # Frontend (React)
+│   ├── public/
+│   │   └── index.html                     # HTML entry point
+│   │
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── TeamTable.jsx              # Main sortable table (TanStack Table)
+│   │   │   ├── TeamTable.css              # Table styles
+│   │   │   ├── TeamDetail.jsx             # Expandable team detail view
+│   │   │   ├── TeamDetail.css             # Detail view styles with team colors
+│   │   │   ├── RefreshButton.jsx          # Data refresh button component
+│   │   │   └── RefreshButton.css          # Button styles with animation
+│   │   │
+│   │   ├── App.js                         # Main application component
+│   │   ├── App.css                        # Application styles
+│   │   ├── index.js                       # React entry point
+│   │   └── index.css                      # Global styles
+│   │
+│   ├── package.json                       # Node dependencies & scripts
+│   └── .env.example                       # Frontend environment template
+│
+├── database/
+│   └── schema.sql                         # PostgreSQL schema for Supabase
+│
+├── .github/
+│   └── workflows/
+│       └── daily-refresh.yml              # GitHub Actions (Phase 2 automation)
+│
+├── .env.example                           # Backend environment template
+├── .gitignore                             # Git ignore rules
+├── vercel.json                            # Vercel deployment configuration
+│
+└── Documentation/
+    ├── README.md                          # Project overview & quick start
+    ├── SETUP.md                           # Detailed setup instructions
+    ├── QUICKSTART.md                      # Quick reference guide
+    ├── DEVELOPMENT.md                     # Developer guide
+    ├── DEPLOYMENT_CHECKLIST.md            # Pre-deployment checklist
+    ├── PROJECT_SUMMARY.md                 # Comprehensive project summary
+    └── STRUCTURE.txt                      # This file
+
+
+Key Files Explained
+===================
+
+Backend Files:
+--------------
+app.py              - Flask server, API routes, Supabase integration
+fetch_data.py       - Connects to CBBD API, fetches team stats & efficiency
+calculate_ratings.py - Implements Four Factors rating algorithm
+requirements.txt    - Python packages: flask, cbbd, supabase, etc.
+
+Frontend Files:
+--------------
+App.js              - Main component, state management, API calls
+TeamTable.jsx       - Sortable table with 10 columns, click-to-expand
+TeamDetail.jsx      - Team breakdown with colors, ratings, factors
+RefreshButton.jsx   - Button with loading state & animation
+package.json        - React, TanStack Table, Axios dependencies
+
+Configuration:
+-------------
+.env.example        - Template for CBBD_API_KEY, SUPABASE credentials
+vercel.json         - Deployment config for Vercel hosting
+schema.sql          - Database table with 20+ columns for team data
+
+Documentation:
+-------------
+README.md           - Start here: overview, features, quick start
+SETUP.md            - Complete setup walkthrough with troubleshooting
+QUICKSTART.md       - Fast reference for daily development
+DEVELOPMENT.md      - Guide for adding features & customization
+DEPLOYMENT_CHECKLIST - Pre-launch verification checklist
+PROJECT_SUMMARY.md  - Comprehensive summary of what was built
+
+
+Data Flow
+=========
+
+1. User clicks "Refresh Data" button
+   └─> RefreshButton.jsx
+
+2. Frontend sends POST to /api/refresh
+   └─> App.js (handleRefresh)
+
+3. Backend fetches from CBBD API
+   └─> fetch_data.py (CBBDataFetcher)
+
+4. Backend calculates ratings
+   └─> calculate_ratings.py (RatingCalculator)
+
+5. Backend saves to Supabase
+   └─> app.py (Supabase client)
+
+6. Frontend fetches updated teams
+   └─> App.js (GET /api/teams)
+
+7. Table displays teams
+   └─> TeamTable.jsx
+
+8. User clicks team row
+   └─> TeamDetail.jsx expands
+
+
+API Endpoints
+=============
+
+GET  /api/health            - Health check
+GET  /api/teams             - Get all teams (supports ?sort_by=)
+GET  /api/teams/<name>      - Get specific team
+POST /api/refresh           - Fetch & update all team data
+GET  /api/stats             - Database statistics
+
+
+Component Hierarchy
+===================
+
+App
+├── Header
+│   ├── Title
+│   ├── Last Updated
+│   └── RefreshButton
+│
+├── Main
+│   ├── ErrorBanner (conditional)
+│   ├── LoadingSpinner (conditional)
+│   └── TeamTable
+│       └── TeamDetail (expandable per row)
+│
+└── Footer
+
+
+Database Schema
+===============
+
+Table: team_ratings
+- id (serial primary key)
+- team_name, season, conference
+- overall_rating, offensive_rating, defensive_rating
+- off_efg, off_orb, off_tov, off_ftr
+- def_efg, def_orb, def_tov, def_ftr
+- tempo
+- primary_color, secondary_color, logo_url
+- last_updated
+
+Indexes:
+- overall_rating (DESC)
+- team_name, season (composite)
+
+
+Environment Variables
+====================
+
+Backend (.env in root):
+- CBBD_API_KEY          - Your CBBD API key
+- SUPABASE_URL          - Supabase project URL
+- SUPABASE_ANON_KEY     - Supabase anonymous key
+
+Frontend (frontend/.env):
+- REACT_APP_API_URL     - Backend API URL (http://localhost:5000)
+
+
+Development Commands
+===================
+
+Backend:
+cd api
+python -m venv venv
+venv\Scripts\activate              # Windows
+source venv/bin/activate           # Mac/Linux
+pip install -r requirements.txt
+python app.py
+
+Frontend:
+cd frontend
+npm install
+npm start
+
+Production Build:
+cd frontend
+npm run build
+
+
+File Count by Type
+=================
+
+Python:     3 files  (app.py, fetch_data.py, calculate_ratings.py)
+React/JS:   6 files  (App.js, index.js, 4 components)
+CSS:        5 files  (index.css, App.css, 3 component styles)
+Config:     5 files  (.env.example x2, vercel.json, .gitignore, package.json)
+Database:   1 file   (schema.sql)
+Docs:       6 files  (README, SETUP, QUICKSTART, DEVELOPMENT, DEPLOYMENT, SUMMARY)
+HTML:       1 file   (index.html)
+Other:      2 files  (requirements.txt, daily-refresh.yml)
+---
+Total:      29 files
+
+
+Lines of Code Estimate
+======================
+
+Backend:     ~800 lines
+Frontend:    ~1200 lines
+Styles:      ~500 lines
+Config:      ~100 lines
+---
+Total:       ~2600 lines (excluding docs)
+
+
+Quick Navigation
+===============
+
+Need to...                          Look in...
+-----------                         ----------
+Understand the project              → README.md
+Set up for first time               → SETUP.md
+Find quick commands                 → QUICKSTART.md
+Add new features                    → DEVELOPMENT.md
+Prepare for deployment              → DEPLOYMENT_CHECKLIST.md
+See what was built                  → PROJECT_SUMMARY.md
+
+Modify ratings algorithm            → api/calculate_ratings.py
+Add API endpoint                    → api/app.py
+Change data source                  → api/fetch_data.py
+Modify table columns                → frontend/src/components/TeamTable.jsx
+Change team detail layout           → frontend/src/components/TeamDetail.jsx
+Update styles                       → frontend/src/components/*.css
+Change database structure           → database/schema.sql
+Configure deployment                → vercel.json
+Set environment variables           → .env.example
+
+
+Phase 2 Preview
+==============
+
+Future additions (not in MVP):
+- LLM-generated team descriptions
+- Automated daily updates (workflow ready in .github/workflows/)
+- Historical trend charts
+- Strength of schedule visualization
+- Player-level data
+
+
+Status: ✅ MVP COMPLETE & READY FOR DEPLOYMENT

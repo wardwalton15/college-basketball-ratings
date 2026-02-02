@@ -10,7 +10,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-from fetch_data import CBBDataFetcher, validate_team_data
+from fetch_data import CBBDataFetcher
 from calculate_ratings import RatingCalculator
 
 load_dotenv()
@@ -31,7 +31,6 @@ else:
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat()
@@ -40,30 +39,17 @@ def health_check():
 
 @app.route('/api/teams', methods=['GET'])
 def get_teams():
-    """
-    Get all team ratings from database
-
-    Query Parameters:
-        season (int): Season year (default: 2025)
-        sort_by (str): Field to sort by (default: overall_rating)
-        order (str): Sort order 'asc' or 'desc' (default: desc)
-    """
+    """Get all team ratings from database."""
     if not supabase:
         return jsonify({'error': 'Database not configured'}), 500
 
-    season = request.args.get('season', 2025, type=int)
-    sort_by = request.args.get('sort_by', 'overall_rating')
+    season = request.args.get('season', 2026, type=int)
+    sort_by = request.args.get('sort_by', 'overall_composite')
     order = request.args.get('order', 'desc')
 
     try:
-        # Build query
         query = supabase.table('team_ratings').select('*').eq('season', season)
-
-        # Add sorting
-        ascending = order.lower() == 'asc'
-        query = query.order(sort_by, desc=not ascending)
-
-        # Execute query
+        query = query.order(sort_by, desc=(order.lower() != 'asc'))
         response = query.execute()
 
         return jsonify({
@@ -71,29 +57,17 @@ def get_teams():
             'count': len(response.data),
             'teams': response.data
         })
-
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/teams/<team_name>', methods=['GET'])
 def get_team(team_name):
-    """
-    Get specific team data
-
-    Path Parameters:
-        team_name (str): Name of the team
-
-    Query Parameters:
-        season (int): Season year (default: 2025)
-    """
+    """Get a specific team's data."""
     if not supabase:
         return jsonify({'error': 'Database not configured'}), 500
 
-    season = request.args.get('season', 2025, type=int)
+    season = request.args.get('season', 2026, type=int)
 
     try:
         response = supabase.table('team_ratings') \
@@ -103,95 +77,81 @@ def get_team(team_name):
             .execute()
 
         if not response.data:
-            return jsonify({
-                'success': False,
-                'error': 'Team not found'
-            }), 404
+            return jsonify({'success': False, 'error': 'Team not found'}), 404
 
-        return jsonify({
-            'success': True,
-            'team': response.data[0]
-        })
-
+        return jsonify({'success': True, 'team': response.data[0]})
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/refresh', methods=['POST'])
 def refresh_data():
-    """
-    Refresh all team data from CBBD API
-
-    Request Body (JSON):
-        season (int): Season year (default: 2025 for 2024-25 season)
-        scaling_factor (float): Optional custom scaling factor
-    """
+    """Fetch fresh data from CBBD API, calculate ratings, and store in database."""
     if not supabase:
         return jsonify({'error': 'Database not configured'}), 500
 
     try:
-        # Get request parameters
         data = request.get_json() or {}
-        season = data.get('season', 2025)  # Use 2025 for current season
-        scaling_factor = data.get('scaling_factor')
+        season = data.get('season', 2026)
 
         print(f"Starting data refresh for season {season}...")
 
-        # Fetch data from CBBD API
+        # 1. Fetch from API
         fetcher = CBBDataFetcher()
-        raw_data = fetcher.fetch_all_data(season)
+        raw_data = fetcher.fetch_all(season)
+        teams = fetcher.build_team_records(raw_data, season)
 
-        # Process and combine all data
-        processed_teams = fetcher.process_team_data(raw_data, season)
+        if not teams:
+            return jsonify({'success': False, 'error': 'No team data received'}), 500
 
-        # Filter valid teams
-        valid_teams = [t for t in processed_teams if validate_team_data(t)]
+        # 2. Calculate ratings
+        calculator = RatingCalculator()
+        rated_teams = calculator.process_teams(teams)
 
-        if not valid_teams:
-            return jsonify({
-                'success': False,
-                'error': 'No valid team data received'
-            }), 500
-
-        print(f"Processing {len(valid_teams)} valid teams...")
-
-        # Calculate ratings
-        calculator = RatingCalculator(scaling_factor=scaling_factor)
-        rated_teams = calculator.process_teams(valid_teams)
-
-        # Prepare data for database
+        # 3. Prepare database records
         db_records = []
         for team in rated_teams:
-            record = {
-                'team_name': team.get('team'),
+            db_records.append({
+                'team_name': team['team'],
                 'season': season,
                 'conference': team.get('conference'),
-                'overall_rating': team.get('overall_rating'),
-                'offensive_rating': team.get('offensive_rating'),
-                'defensive_rating': team.get('defensive_rating'),
-                'off_efg': team.get('off_efg_pct'),
-                'off_orb': team.get('off_orb_pct'),
-                'off_tov': team.get('off_tov_pct'),
+                'wins': team.get('wins'),
+                'losses': team.get('losses'),
+                'games': team.get('games'),
+                'overall_composite': team.get('overall_composite'),
+                'raw_composite': team.get('raw_composite'),
+                'off_composite': team.get('off_composite'),
+                'def_composite': team.get('def_composite'),
+                'adj_off': team.get('adj_off'),
+                'adj_def': team.get('adj_def'),
+                'adj_net': team.get('adj_net'),
+                'overall_rank': team.get('overall_rank'),
+                'raw_composite_rank': team.get('raw_composite_rank'),
+                'off_composite_rank': team.get('off_composite_rank'),
+                'def_composite_rank': team.get('def_composite_rank'),
+                'rank_off': team.get('rank_off'),
+                'rank_def': team.get('rank_def'),
+                'rank_net': team.get('rank_net'),
+                'off_efg': team.get('off_efg'),
+                'off_to_ratio': team.get('off_to_ratio'),
+                'off_orb': team.get('off_orb'),
                 'off_ftr': team.get('off_ftr'),
-                'def_efg': team.get('def_efg_pct'),
-                'def_orb': team.get('def_orb_pct'),
-                'def_tov': team.get('def_tov_pct'),
+                'def_efg': team.get('def_efg'),
+                'def_to_ratio': team.get('def_to_ratio'),
+                'def_orb': team.get('def_orb'),
                 'def_ftr': team.get('def_ftr'),
-                'tempo': team.get('tempo'),
-                'primary_color': team.get('color'),
-                'secondary_color': team.get('alt_color'),
+                'pace': team.get('pace'),
+                'srs': team.get('srs'),
+                'primary_color': team.get('primary_color'),
+                'secondary_color': team.get('secondary_color'),
                 'logo_url': team.get('logo'),
-                'last_updated': datetime.now().isoformat()
-            }
-            db_records.append(record)
+                'abbreviation': team.get('abbreviation'),
+                'last_updated': datetime.now().isoformat(),
+            })
 
+        # 4. Upsert to database
         print(f"Saving {len(db_records)} records to database...")
-
-        # Upsert to database (insert or update if exists)
-        response = supabase.table('team_ratings').upsert(
+        supabase.table('team_ratings').upsert(
             db_records,
             on_conflict='team_name,season'
         ).execute()
@@ -207,36 +167,22 @@ def refresh_data():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
-    """
-    Get statistics about the database
-
-    Query Parameters:
-        season (int): Season year (default: 2025)
-    """
+    """Get database statistics."""
     if not supabase:
         return jsonify({'error': 'Database not configured'}), 500
 
-    season = request.args.get('season', 2025, type=int)
+    season = request.args.get('season', 2026, type=int)
 
     try:
         response = supabase.table('team_ratings').select('*').eq('season', season).execute()
 
         if not response.data:
-            return jsonify({
-                'success': True,
-                'stats': {
-                    'total_teams': 0,
-                    'last_updated': None
-                }
-            })
+            return jsonify({'success': True, 'stats': {'total_teams': 0, 'last_updated': None}})
 
         teams = response.data
         last_updated = max(t.get('last_updated', '') for t in teams)
@@ -249,12 +195,8 @@ def get_stats():
                 'conferences': len(set(t.get('conference') for t in teams if t.get('conference')))
             }
         })
-
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':

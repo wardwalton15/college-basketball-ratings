@@ -49,7 +49,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ season: 2025 }),
+        body: JSON.stringify({ season: 2026 }),
       });
 
       const data = await response.json();

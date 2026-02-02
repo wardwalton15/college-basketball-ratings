@@ -1,6 +1,6 @@
 """
 Data fetching module for College Basketball Ratings
-Fetches data from CollegeBasketballData.com API using direct HTTP requests
+Fetches data from CollegeBasketballData.com API (api.collegebasketballdata.com)
 """
 
 import os
@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# API Base URL
 CBBD_API_BASE = "https://api.collegebasketballdata.com"
 
 
@@ -19,293 +18,212 @@ class CBBDataFetcher:
     """Handles fetching data from CBBD API"""
 
     def __init__(self, api_key: str = None):
-        """
-        Initialize the data fetcher
-
-        Args:
-            api_key: CBBD API key (Bearer token)
-        """
         self.api_key = api_key or os.getenv('CBBD_API_KEY')
         if not self.api_key:
             raise ValueError("CBBD_API_KEY not found in environment variables")
 
-        self.headers = {
+        self.session = requests.Session()
+        self.session.headers.update({
             'Authorization': f'Bearer {self.api_key}',
             'Accept': 'application/json'
-        }
-        self.session = requests.Session()
-        self.session.headers.update(self.headers)
+        })
 
-    def _make_request(self, endpoint: str, params: dict = None, retries: int = 3) -> Optional[List[Dict]]:
-        """
-        Make an API request with retry logic
-
-        Args:
-            endpoint: API endpoint path
-            params: Query parameters
-            retries: Number of retry attempts
-
-        Returns:
-            JSON response as list of dictionaries
-        """
+    def _make_request(self, endpoint: str, params: dict = None, retries: int = 3) -> Optional[list | dict]:
+        """Make an API request with retry logic and exponential backoff."""
         url = f"{CBBD_API_BASE}{endpoint}"
 
         for attempt in range(retries):
             try:
                 response = self.session.get(url, params=params, timeout=60)
                 response.raise_for_status()
+
+                # The API serves Swagger UI HTML for invalid endpoints
+                content_type = response.headers.get('content-type', '')
+                if 'text/html' in content_type:
+                    raise ValueError(f"Endpoint {endpoint} returned HTML (likely invalid endpoint)")
+
                 return response.json()
-            except requests.exceptions.JSONDecodeError as e:
-                print(f"Attempt {attempt + 1}/{retries} failed: {e}")
-                print(f"Response status: {response.status_code}")
-                print(f"Response content (first 500 chars): {response.text[:500]}")
+            except requests.exceptions.RequestException as e:
+                print(f"  Attempt {attempt + 1}/{retries} failed: {e}")
                 if attempt < retries - 1:
                     time.sleep(2 ** attempt)
                 else:
                     raise
-            except requests.exceptions.RequestException as e:
-                print(f"Attempt {attempt + 1}/{retries} failed: {e}")
-                if attempt < retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
-                else:
-                    raise
 
-    def fetch_adjusted_efficiency(self, season: int = 2025) -> List[Dict]:
+    def fetch_adjusted_ratings(self, season: int = 2026) -> List[Dict]:
         """
-        Fetch opponent-adjusted efficiency ratings (KenPom-style)
-        This is the primary data source for our ratings
+        Fetch opponent-adjusted efficiency ratings for all D-I teams.
 
-        Args:
-            season: Season year (e.g., 2025)
-
-        Returns:
-            List of adjusted efficiency dictionaries
+        Endpoint: /ratings/adjusted
+        Returns ~364 D-I teams with:
+          - offensiveRating, defensiveRating, netRating
+          - rankings.offense, rankings.defense, rankings.net
         """
-        print(f"Fetching adjusted efficiency ratings for {season}...")
+        print(f"Fetching adjusted ratings for {season}...")
+        data = self._make_request('/ratings/adjusted', params={'season': season})
+        print(f"  Got {len(data)} teams")
+        return data or []
 
-        try:
-            response = self._make_request(
-                '/ratings/efficiency',
-                params={'season': season}
-            )
-            print(f"Fetched {len(response) if response else 0} efficiency ratings")
-            return response or []
-        except Exception as e:
-            print(f"Error fetching adjusted efficiency: {e}")
-            raise
-
-    def fetch_team_info(self, season: int = 2025) -> List[Dict]:
+    def fetch_team_stats(self, season: int = 2026) -> List[Dict]:
         """
-        Fetch team information including colors and logos
+        Fetch team season stats including four factors.
 
-        Args:
-            season: Season year
-
-        Returns:
-            List of team info dictionaries
+        Endpoint: /stats/team/season
+        Returns ~700 teams (includes non-D-I) with:
+          - teamStats.fourFactors (eFG%, TO ratio, ORB%, FTR)
+          - opponentStats.fourFactors (same for opponents)
+          - pace, wins, losses, full box score aggregates
         """
-        print(f"Fetching team info...")
+        print(f"Fetching team season stats for {season}...")
+        data = self._make_request('/stats/team/season', params={'season': season})
+        print(f"  Got {len(data)} team stat records")
+        return data or []
 
-        try:
-            response = self._make_request('/teams')
-            print(f"Fetched {len(response) if response else 0} teams info")
-            return response or []
-        except Exception as e:
-            print(f"Error fetching team info: {e}")
-            return []
-
-    def fetch_four_factors(self, season: int = 2025) -> List[Dict]:
+    def fetch_srs_ratings(self, season: int = 2026) -> List[Dict]:
         """
-        Fetch four factors stats directly if available
+        Fetch Simple Rating System (SRS) ratings.
 
-        Args:
-            season: Season year
-
-        Returns:
-            List of four factors dictionaries
+        Endpoint: /ratings/srs
+        Returns ~364 D-I teams with a single SRS rating value.
         """
-        print(f"Fetching four factors for {season}...")
+        print(f"Fetching SRS ratings for {season}...")
+        data = self._make_request('/ratings/srs', params={'season': season})
+        print(f"  Got {len(data)} SRS ratings")
+        return data or []
 
-        try:
-            response = self._make_request(
-                '/stats/fourfactors',
-                params={'season': season}
-            )
-            print(f"Fetched {len(response) if response else 0} four factors records")
-            return response or []
-        except Exception as e:
-            print(f"Note: Four factors endpoint not available, using efficiency data")
-            return []
-
-    def fetch_all_data(self, season: int = 2025) -> Dict[str, List[Dict]]:
+    def fetch_team_info(self) -> List[Dict]:
         """
-        Fetch all required data for the application
+        Fetch team branding info (colors, venues, etc).
 
-        Args:
-            season: Season year
-
-        Returns:
-            Dictionary with efficiency, team_info, and four_factors keys
+        Endpoint: /teams
+        Returns all teams with:
+          - school, mascot, abbreviation, primaryColor, secondaryColor
+          - currentVenue, currentCity, currentState, conference
         """
+        print("Fetching team info...")
+        data = self._make_request('/teams')
+        print(f"  Got {len(data)} teams")
+        return data or []
+
+    def fetch_all(self, season: int = 2026) -> Dict[str, List[Dict]]:
+        """Fetch all data sources needed for team ratings."""
         print(f"\n{'='*50}")
-        print(f"Fetching all data for {season} season...")
+        print(f"Fetching all data for {season} season")
         print(f"{'='*50}\n")
 
-        efficiency = self.fetch_adjusted_efficiency(season)
-        team_info = self.fetch_team_info(season)
-        four_factors = self.fetch_four_factors(season)
-
         return {
-            'efficiency': efficiency,
-            'team_info': team_info,
-            'four_factors': four_factors
+            'adjusted': self.fetch_adjusted_ratings(season),
+            'team_stats': self.fetch_team_stats(season),
+            'srs': self.fetch_srs_ratings(season),
+            'team_info': self.fetch_team_info(),
         }
 
-    def process_team_data(self, data: Dict[str, List[Dict]], season: int = 2025) -> List[Dict]:
+    def build_team_records(self, data: Dict[str, List[Dict]], season: int = 2026) -> List[Dict]:
         """
-        Process and combine all fetched data into unified team records
+        Merge all data sources into unified team records.
 
-        Args:
-            data: Dictionary containing efficiency, team_info, four_factors
-            season: Season year
-
-        Returns:
-            List of processed team dictionaries ready for rating calculation
+        Uses adjusted ratings as the canonical list of D-I teams (~364),
+        then joins team stats, SRS, and branding info by team name.
         """
-        efficiency_data = data.get('efficiency', [])
-        team_info_data = data.get('team_info', [])
-        four_factors_data = data.get('four_factors', [])
+        adjusted = data.get('adjusted', [])
+        team_stats = data.get('team_stats', [])
+        srs = data.get('srs', [])
+        team_info = data.get('team_info', [])
 
-        # Create lookup dictionaries
-        team_info_map = {}
-        for team in team_info_data:
-            team_name = team.get('team') or team.get('school')
-            if team_name:
-                team_info_map[team_name] = team
+        # Build lookup maps
+        stats_map = {t['team']: t for t in team_stats if t.get('team')}
+        srs_map = {t['team']: t for t in srs if t.get('team')}
+        # team_info uses 'school' not 'team'
+        info_map = {t['school']: t for t in team_info if t.get('school')}
 
-        four_factors_map = {}
-        for ff in four_factors_data:
-            team_name = ff.get('team')
-            if team_name:
-                four_factors_map[team_name] = ff
-
-        processed_teams = []
-
-        for eff in efficiency_data:
-            team_name = eff.get('team')
-            if not team_name:
+        teams = []
+        for adj in adjusted:
+            name = adj.get('team')
+            if not name:
                 continue
 
-            # Get team info for colors/logo
-            info = team_info_map.get(team_name, {})
+            stats = stats_map.get(name, {})
+            srs_data = srs_map.get(name, {})
+            info = info_map.get(name, {})
 
-            # Get four factors if available
-            ff = four_factors_map.get(team_name, {})
+            off_ff = (stats.get('teamStats') or {}).get('fourFactors') or {}
+            def_ff = (stats.get('opponentStats') or {}).get('fourFactors') or {}
 
-            # Build unified team record
-            # The efficiency endpoint provides adjusted offensive/defensive efficiency
-            # We'll use these directly or derive four factors from them
-            team_record = {
-                'team': team_name,
+            teams.append({
+                'team': name,
                 'season': season,
-                'conference': eff.get('conference'),
+                'conference': adj.get('conference'),
 
-                # Adjusted efficiency data
-                'adj_offensive_efficiency': eff.get('offense') or eff.get('adjOffense') or eff.get('adjustedOffense'),
-                'adj_defensive_efficiency': eff.get('defense') or eff.get('adjDefense') or eff.get('adjustedDefense'),
-                'tempo': eff.get('tempo') or eff.get('adjustedTempo'),
+                # Adjusted efficiency (points per 100 possessions)
+                'adj_off': adj.get('offensiveRating'),
+                'adj_def': adj.get('defensiveRating'),
+                'adj_net': adj.get('netRating'),
 
-                # Four factors - try from four_factors endpoint first, then efficiency
-                'off_efg_pct': ff.get('offEfgPct') or ff.get('off_efg_pct') or eff.get('offEfgPct') or eff.get('offensiveEfgPct'),
-                'off_orb_pct': ff.get('offOrbPct') or ff.get('off_orb_pct') or eff.get('offOrbPct') or eff.get('offensiveOrbPct'),
-                'off_tov_pct': ff.get('offTovPct') or ff.get('off_tov_pct') or eff.get('offTovPct') or eff.get('offensiveTovPct'),
-                'off_ftr': ff.get('offFtr') or ff.get('off_ftr') or eff.get('offFtr') or eff.get('offensiveFtr'),
+                # API-provided rankings
+                'rank_off': (adj.get('rankings') or {}).get('offense'),
+                'rank_def': (adj.get('rankings') or {}).get('defense'),
+                'rank_net': (adj.get('rankings') or {}).get('net'),
 
-                'def_efg_pct': ff.get('defEfgPct') or ff.get('def_efg_pct') or eff.get('defEfgPct') or eff.get('defensiveEfgPct'),
-                'def_orb_pct': ff.get('defOrbPct') or ff.get('def_orb_pct') or eff.get('defOrbPct') or eff.get('defensiveOrbPct'),
-                'def_tov_pct': ff.get('defTovPct') or ff.get('def_tov_pct') or eff.get('defTovPct') or eff.get('defensiveTovPct'),
-                'def_ftr': ff.get('defFtr') or ff.get('def_ftr') or eff.get('defFtr') or eff.get('defensiveFtr'),
+                # Record
+                'wins': stats.get('wins'),
+                'losses': stats.get('losses'),
+                'games': stats.get('games'),
 
-                # Team branding
-                'color': info.get('color') or info.get('primaryColor'),
-                'alt_color': info.get('altColor') or info.get('secondaryColor') or info.get('alt_color'),
-                'logo': info.get('logo') or info.get('logos', [None])[0] if isinstance(info.get('logos'), list) else info.get('logo'),
-            }
+                # Pace
+                'pace': stats.get('pace'),
 
-            processed_teams.append(team_record)
+                # Offensive four factors
+                'off_efg': off_ff.get('effectiveFieldGoalPct'),
+                'off_to_ratio': off_ff.get('turnoverRatio'),
+                'off_orb': off_ff.get('offensiveReboundPct'),
+                'off_ftr': off_ff.get('freeThrowRate'),
 
-        print(f"\nProcessed {len(processed_teams)} teams")
-        return processed_teams
+                # Defensive four factors (opponent stats)
+                'def_efg': def_ff.get('effectiveFieldGoalPct'),
+                'def_to_ratio': def_ff.get('turnoverRatio'),
+                'def_orb': def_ff.get('offensiveReboundPct'),
+                'def_ftr': def_ff.get('freeThrowRate'),
 
+                # SRS
+                'srs': srs_data.get('rating'),
 
-def validate_team_data(team: Dict) -> bool:
-    """
-    Validate team data for completeness and correctness
+                # Branding
+                'primary_color': info.get('primaryColor'),
+                'secondary_color': info.get('secondaryColor'),
+                'logo': info.get('logo'),
+                'abbreviation': info.get('abbreviation'),
+            })
 
-    Args:
-        team: Team data dictionary
+        print(f"\nBuilt {len(teams)} team records")
 
-    Returns:
-        True if valid, False otherwise
-    """
-    # At minimum, we need team name and some efficiency data
-    if not team.get('team'):
-        return False
+        # Report teams missing stats
+        missing_stats = [t['team'] for t in teams if t['off_efg'] is None]
+        if missing_stats:
+            print(f"  {len(missing_stats)} teams missing four factors data")
 
-    # Check if we have at least offensive and defensive efficiency
-    has_efficiency = (
-        team.get('adj_offensive_efficiency') is not None or
-        team.get('off_efg_pct') is not None
-    )
-
-    return has_efficiency
+        return teams
 
 
 if __name__ == "__main__":
-    # Test the fetcher
-    print("Testing CBBD API Data Fetcher...")
+    print("Testing CBBD API Data Fetcher")
     print("-" * 50)
 
-    try:
-        fetcher = CBBDataFetcher()
+    fetcher = CBBDataFetcher()
+    data = fetcher.fetch_all(2026)
+    teams = fetcher.build_team_records(data, 2026)
 
-        # Fetch all data for current season
-        # Note: Use 2025 for 2024-25 season, or check what's available
-        data = fetcher.fetch_all_data(2025)
+    if not teams:
+        print("ERROR: No team data received")
+        exit(1)
 
-        # Process the data
-        teams = fetcher.process_team_data(data, 2025)
+    # Show a sample
+    sample = next((t for t in teams if t['team'] == 'Duke'), teams[0])
+    print(f"\nSample: {sample['team']}")
+    for key, value in sample.items():
+        print(f"  {key}: {value}")
 
-        if teams:
-            print(f"\n{'='*50}")
-            print(f"Successfully processed {len(teams)} teams")
-            print(f"{'='*50}")
-
-            # Show sample team data
-            sample = teams[0]
-            print(f"\nSample team data ({sample['team']}):")
-            for key, value in sample.items():
-                print(f"  {key}: {value}")
-
-            # Find Syracuse specifically
-            syracuse = next((t for t in teams if 'Syracuse' in t.get('team', '')), None)
-            if syracuse:
-                print(f"\n{'='*50}")
-                print("Syracuse Data:")
-                print(f"{'='*50}")
-                for key, value in syracuse.items():
-                    print(f"  {key}: {value}")
-            else:
-                print("\nSyracuse not found in data")
-
-            # Count valid teams
-            valid_count = sum(1 for t in teams if validate_team_data(t))
-            print(f"\nValid teams: {valid_count}/{len(teams)}")
-
-        else:
-            print("No teams data received")
-
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
+    # Summary
+    with_stats = sum(1 for t in teams if t['off_efg'] is not None)
+    print(f"\nTotal teams: {len(teams)}")
+    print(f"With four factors: {with_stats}")
+    print(f"With SRS: {sum(1 for t in teams if t['srs'] is not None)}")

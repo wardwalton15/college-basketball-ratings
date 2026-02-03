@@ -182,15 +182,16 @@ After starting both servers:
 ## Next Steps After Setup
 
 1. Create Supabase account and project
-2. Run `database/schema.sql` in Supabase
+2. Run `database/schema.sql` in Supabase SQL Editor
 3. Get CBBD API key
-4. Fill in environment variables
-5. Start backend and frontend
-6. Click "Refresh Data"
-7. Browse teams and test Syracuse
+4. Configure environment variables in `.env` files
+5. Start backend and frontend servers
+6. Click "Refresh Data" to load team data
+7. Explore team ratings and details
 
 ## Support Files
 
-- Full setup guide: [SETUP.md](SETUP.md)
 - Project overview: [README.md](README.md)
-- Specification: See original project spec document
+- Full setup guide: [SETUP.md](SETUP.md)
+- Developer guide: [DEVELOPMENT.md](DEVELOPMENT.md)
+- Deployment: [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)

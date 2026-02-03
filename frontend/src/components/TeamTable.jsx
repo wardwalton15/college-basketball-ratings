@@ -9,7 +9,7 @@ import TeamDetail from './TeamDetail';
 import './TeamTable.css';
 
 function TeamTable({ teams }) {
-  const [sorting, setSorting] = useState([{ id: 'overall_rating', desc: true }]);
+  const [sorting, setSorting] = useState([{ id: 'overall_composite', desc: true }]);
   const [expandedRow, setExpandedRow] = useState(null);
 
   // Define columns
@@ -35,19 +35,19 @@ function TeamTable({ teams }) {
         size: 200,
       },
       {
-        accessorKey: 'overall_rating',
+        accessorKey: 'overall_composite',
         header: 'Rating',
         cell: (info) => info.getValue()?.toFixed(1) || 'N/A',
         size: 80,
       },
       {
-        accessorKey: 'offensive_rating',
+        accessorKey: 'off_composite',
         header: 'OFF',
         cell: (info) => info.getValue()?.toFixed(1) || 'N/A',
         size: 80,
       },
       {
-        accessorKey: 'defensive_rating',
+        accessorKey: 'def_composite',
         header: 'DEF',
         cell: (info) => info.getValue()?.toFixed(1) || 'N/A',
         size: 80,
@@ -65,7 +65,7 @@ function TeamTable({ teams }) {
         size: 80,
       },
       {
-        accessorKey: 'off_tov',
+        accessorKey: 'off_to_ratio',
         header: 'TOV%',
         cell: (info) => info.getValue()?.toFixed(1) || 'N/A',
         size: 80,
@@ -77,7 +77,7 @@ function TeamTable({ teams }) {
         size: 80,
       },
       {
-        accessorKey: 'tempo',
+        accessorKey: 'pace',
         header: 'Tempo',
         cell: (info) => info.getValue()?.toFixed(1) || 'N/A',
         size: 80,

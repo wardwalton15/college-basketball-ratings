@@ -23,7 +23,7 @@ function TeamDetail({ team }) {
         <div className="rating-section overall-section">
           <h3>Overall Rating</h3>
           <div className="rating-value large">
-            {team.overall_rating?.toFixed(1) || 'N/A'}
+            {team.overall_composite?.toFixed(1) || 'N/A'}
           </div>
           {team.overall_rank && (
             <div className="rank-badge">Rank: #{team.overall_rank}</div>
@@ -34,10 +34,10 @@ function TeamDetail({ team }) {
         <div className="rating-section">
           <h3>Offense</h3>
           <div className="rating-value">
-            {team.offensive_rating?.toFixed(1) || 'N/A'}
+            {team.off_composite?.toFixed(1) || 'N/A'}
           </div>
-          {team.offensive_rank && (
-            <div className="rank-badge">Rank: #{team.offensive_rank}</div>
+          {team.off_composite_rank && (
+            <div className="rank-badge">Rank: #{team.off_composite_rank}</div>
           )}
 
           <div className="factors-grid">
@@ -62,10 +62,10 @@ function TeamDetail({ team }) {
             <div className="factor-item">
               <span className="factor-label">TOV%</span>
               <span className="factor-value">
-                {team.off_tov?.toFixed(1) || 'N/A'}%
+                {team.off_to_ratio?.toFixed(1) || 'N/A'}%
               </span>
-              {team.off_tov_rank && (
-                <span className="factor-rank">(#{team.off_tov_rank})</span>
+              {team.off_to_rank && (
+                <span className="factor-rank">(#{team.off_to_rank})</span>
               )}
             </div>
             <div className="factor-item">
@@ -84,10 +84,10 @@ function TeamDetail({ team }) {
         <div className="rating-section">
           <h3>Defense</h3>
           <div className="rating-value">
-            {team.defensive_rating?.toFixed(1) || 'N/A'}
+            {team.def_composite?.toFixed(1) || 'N/A'}
           </div>
-          {team.defensive_rank && (
-            <div className="rank-badge">Rank: #{team.defensive_rank}</div>
+          {team.def_composite_rank && (
+            <div className="rank-badge">Rank: #{team.def_composite_rank}</div>
           )}
 
           <div className="factors-grid">
@@ -112,10 +112,10 @@ function TeamDetail({ team }) {
             <div className="factor-item">
               <span className="factor-label">Forced TOs</span>
               <span className="factor-value">
-                {team.def_tov?.toFixed(1) || 'N/A'}%
+                {team.def_to_ratio?.toFixed(1) || 'N/A'}%
               </span>
-              {team.def_tov_rank && (
-                <span className="factor-rank">(#{team.def_tov_rank})</span>
+              {team.def_to_rank && (
+                <span className="factor-rank">(#{team.def_to_rank})</span>
               )}
             </div>
             <div className="factor-item">
@@ -134,11 +134,11 @@ function TeamDetail({ team }) {
         <div className="rating-section tempo-section">
           <h3>Tempo</h3>
           <div className="rating-value">
-            {team.tempo?.toFixed(1) || 'N/A'}
+            {team.pace?.toFixed(1) || 'N/A'}
           </div>
           <div className="tempo-description">possessions/game</div>
-          {team.tempo_rank && (
-            <div className="rank-badge">Rank: #{team.tempo_rank}</div>
+          {team.pace_rank && (
+            <div className="rank-badge">Rank: #{team.pace_rank}</div>
           )}
         </div>
       </div>

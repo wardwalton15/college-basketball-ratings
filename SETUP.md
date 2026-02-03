@@ -129,23 +129,6 @@ This guide will walk you through setting up and running the College Basketball R
 
 ---
 
-## Step 5: Test with Syracuse
-
-1. **Find Syracuse in the table**
-   - Use browser search (Ctrl+F / Cmd+F)
-   - Or sort by team name
-
-2. **Click the Syracuse row**
-   - Detailed view should expand
-   - Check that ratings are displayed
-   - Verify team colors appear (Orange/Blue)
-
-3. **Verify the stats**
-   - Overall Rating
-   - Offensive Rating with eFG%, ORB%, TOV%, FTR
-   - Defensive Rating with opponent stats
-   - Tempo
-
 ---
 
 ## Troubleshooting
@@ -255,8 +238,9 @@ All stats are **opponent-adjusted** (KenPom-style)
 
 ---
 
-## Next Steps (Phase 2 - Future)
+## Future Enhancements (Not Currently Implemented)
 
+Phase 2 features planned but not yet built:
 - LLM-generated team descriptions
 - Automated daily updates via GitHub Actions
 - Historical trend charts

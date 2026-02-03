@@ -1,6 +1,6 @@
 # College Basketball Ratings
 
-A web application that displays college basketball team ratings based on the Four Factors methodology with opponent adjustments.
+A web application that displays college basketball team ratings using the Four Factors methodology with opponent adjustments.
 
 ![Project Status](https://img.shields.io/badge/status-MVP-green)
 ![Python](https://img.shields.io/badge/python-3.9+-blue)
@@ -8,80 +8,64 @@ A web application that displays college basketball team ratings based on the Fou
 
 ## Overview
 
-This application provides comprehensive team ratings for Division I college basketball teams using advanced analytics:
+This application provides team ratings for all Division I college basketball teams using advanced analytics:
 
-- **Overall Team Ratings** - Composite score from offensive and defensive performance
-- **Four Factors Analysis** - Breakdown by eFG%, Rebounding, Turnovers, and Free Throws
-- **Opponent Adjustments** - KenPom-style adjustments for strength of schedule
-- **Interactive Sorting** - Sort teams by any metric
-- **Detailed Team Views** - Click any team to see full statistical breakdown
+- **Overall Team Ratings** - Composite score combining offensive and defensive performance
+- **Four Factors Analysis** - eFG%, Rebounding, Turnovers, and Free Throw Rate
+- **Opponent Adjustments** - Strength-of-schedule corrections from CBBD API
+- **Interactive Table** - Sort by any metric, click to expand team details
+- **Responsive Design** - Works on mobile and desktop
 
 ## Features
 
-### Current (MVP - Phase 1)
-
-- Main table with all 362 D-I teams
-- Sortable columns for all metrics
-- Click-to-expand team details with color schemes
-- Manual data refresh from CBBD API
-- Responsive design for mobile and desktop
-
-### Coming Soon (Phase 2)
-
-- LLM-generated team descriptions
-- Automated daily updates
-- Historical trend charts
-- Strength of schedule visualization
-- Player-level data integration
+- Sortable table with all 360+ D-I teams
+- 10+ statistical metrics per team
+- Click-to-expand team details with dynamic color schemes
+- Manual data refresh from CollegeBasketballData.com API
+- Real-time loading states and error handling
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.9+
-- Node.js 16+
-- CBBD API key ([get one here](https://collegebasketballdata.com))
-- Supabase account (free tier)
+- Python 3.9+ and Node.js 16+
+- [CBBD API key](https://collegebasketballdata.com)
+- [Supabase account](https://supabase.com) (free tier works)
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd college-basketball-ratings
-   ```
-
-2. **Set up environment variables**
+1. **Set up environment variables**
    ```bash
    cp .env.example .env
-   # Edit .env with your credentials
+   cp frontend/.env.example frontend/.env
+   # Edit both files with your credentials
    ```
 
-3. **Set up the database**
+2. **Set up the database**
    - Create a Supabase project
-   - Run the SQL in `database/schema.sql`
+   - Run `database/schema.sql` in the SQL Editor
 
-4. **Start the backend**
+3. **Start the backend**
    ```bash
    cd api
    python -m venv venv
-   source venv/bin/activate  # or venv\Scripts\activate on Windows
+   source venv/bin/activate  # Windows: venv\Scripts\activate
    pip install -r requirements.txt
    python app.py
    ```
 
-5. **Start the frontend**
+4. **Start the frontend** (in a new terminal)
    ```bash
    cd frontend
    npm install
    npm start
    ```
 
-6. **Open the app**
-   - Navigate to `http://localhost:3000`
-   - Click "Refresh Data" to load teams
+5. **Load data**
+   - Open `http://localhost:3000`
+   - Click "Refresh Data" to fetch team data
 
-For detailed setup instructions, see [SETUP.md](SETUP.md).
+See [SETUP.md](SETUP.md) for detailed instructions and troubleshooting.
 
 ## Technology Stack
 
@@ -95,26 +79,13 @@ For detailed setup instructions, see [SETUP.md](SETUP.md).
 
 ## Rating Methodology
 
-### Overall Rating
-```
-Overall = (Offensive × 0.52) + (Defensive × 0.48)
-```
+**Overall Rating:** Blends raw composite (33%) with opponent-adjusted net rating (67%)
 
-### Offensive Rating
-Combines four factors with weightings:
-- **eFG%** (40%): Effective Field Goal Percentage
-- **ORB%** (20%): Offensive Rebound Percentage
-- **TOV%** (25%): Turnover Percentage (lower is better)
-- **FTR** (15%): Free Throw Rate
+**Offensive Composite:** eFG% (40%) + ORB% (20%) + (100-TOV%) (25%) + FTR (15%)
 
-### Defensive Rating
-Evaluates opponent-adjusted defensive performance:
-- **Opp eFG%** (40%): Opponent shooting efficiency
-- **Opp ORB%** (20%): Defensive rebounding
-- **Forced TOV%** (25%): Creating turnovers
-- **Opp FTR** (15%): Limiting free throws
+**Defensive Composite:** (100-Opp eFG%) (40%) + (100-Opp ORB%) (20%) + Forced TOV% (25%) + (100-Opp FTR) (15%)
 
-All metrics use **opponent adjustments** from the CBBD API's adjusted efficiency endpoint, providing KenPom-style strength of schedule corrections.
+All metrics use opponent adjustments from the CBBD API for strength-of-schedule corrections.
 
 ## Project Structure
 
@@ -146,80 +117,32 @@ college-basketball-ratings/
 
 ## Usage
 
-### Viewing Teams
-- Teams are displayed in a sortable table
-- Click any column header to sort
-- Default sort: Overall Rating (highest first)
-
-### Team Details
-- Click any team row to expand
-- Shows overall, offensive, and defensive ratings
-- Displays all four factors with individual ranks
-- Team colors applied to detail view
-
-### Refreshing Data
-- Click "Refresh Data" in the header
-- Fetches latest data from CBBD API
-- Recalculates all ratings
-- Updates database
+- **Sort:** Click column headers to sort teams
+- **View Details:** Click any team row to expand full breakdown
+- **Refresh Data:** Click "Refresh Data" button to fetch latest stats (takes ~30-60 seconds)
 
 ## Development
 
-### Running Tests
-```bash
-# Test data fetching
-cd api
-python fetch_data.py
-
-# Test rating calculations
-python calculate_ratings.py
-```
-
-### Environment Variables
-
-**Backend (.env)**
-```
-CBBD_API_KEY=your_key_here
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=your_key_here
-```
-
-**Frontend (.env)**
-```
-REACT_APP_API_URL=http://localhost:5000
-```
+See [DEVELOPMENT.md](DEVELOPMENT.md) for customization and extending features.
 
 ## Deployment
 
-The application is configured for deployment on Vercel:
+Configured for Vercel deployment. See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for the complete deployment guide.
 
-1. Connect GitHub repository to Vercel
-2. Set environment variables in Vercel dashboard
-3. Deploy automatically on push to main
+## Documentation
 
-See [SETUP.md](SETUP.md) for detailed deployment instructions.
+- **[SETUP.md](SETUP.md)** - Complete setup guide with troubleshooting
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick command reference
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Guide for customization and adding features
+- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Pre-deployment verification
 
 ## Data Source
 
-This application uses data from [CollegeBasketballData.com](https://collegebasketballdata.com) via the `cbbd` Python package.
-
-- Team season statistics (box scores)
-- Adjusted efficiency ratings (opponent-adjusted)
-- Team metadata (colors, logos)
-
-## Contributing
-
-This is currently an MVP. Future enhancements are planned for Phase 2.
+Data from [CollegeBasketballData.com](https://collegebasketballdata.com) via the `cbbd` Python package.
 
 ## License
 
 This project is for educational and personal use.
-
-## Acknowledgments
-
-- Data provided by [CollegeBasketballData.com](https://collegebasketballdata.com)
-- Rating methodology inspired by Dean Oliver's Four Factors
-- Opponent adjustments based on KenPom methodology
 
 ---
 

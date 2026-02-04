@@ -1,38 +1,54 @@
 """
 Rating calculation module for College Basketball Ratings.
 
-Builds a composite team rating from the Four Factors methodology,
-then compares against the API's opponent-adjusted efficiency ratings.
+Rating System: Adjusted Efficiency Margin with Consistency Component
 
-Four Factors (Dean Oliver):
-  Offense: eFG%, Turnover Rate, ORB%, Free Throw Rate
-  Defense: Same factors for opponent (lower eFG%, higher TO forced, etc.)
+Overall Rating = 90% Adjusted Efficiency Margin + 10% Consistency Component
 
-The API also provides opponent-adjusted efficiency ratings (KenPom-style)
-which we store alongside our composite for comparison.
+Adjusted Efficiency Margin (adj_net):
+  - Points per 100 possessions differential (offense - defense)
+  - Opponent-adjusted for strength of schedule
+
+Consistency Component:
+  - Rewards lower variance in tempo and offensive efficiency across games
+  - Uses Dean Oliver possession formula: 0.96 * [(FGA) + (TO) + 0.44*(FTA) - (ORB)]
+  - Lower variance = higher consistency score
+
+The Four Factors composites are still calculated for display/analysis purposes.
 """
 
 from typing import Dict, List
 
 
 class RatingCalculator:
-    """Calculates team ratings from Four Factors and adjusted efficiency data."""
+    """Calculates team ratings from adjusted efficiency and game consistency."""
 
-    # Offensive vs defensive weight in overall composite
+    # Main rating weights
+    ADJ_EFFICIENCY_WEIGHT = 0.90  # Adjusted efficiency margin
+    CONSISTENCY_WEIGHT = 0.10     # Consistency component
+
+    # Adjusted efficiency margin normalization
+    ADJ_NET_FLOOR = -30.0    # Maps to 0 (worst)
+    ADJ_NET_CEILING = 35.0   # Maps to 100 (best)
+
+    # Consistency component normalization (standard deviations)
+    # Lower variance = better, so we invert these
+    TEMPO_VAR_FLOOR = 0.0      # Perfect consistency (maps to 100)
+    TEMPO_VAR_CEILING = 12.0   # High variance (maps to 0)
+    OFF_EFF_VAR_FLOOR = 0.0    # Perfect consistency (maps to 100)
+    OFF_EFF_VAR_CEILING = 20.0 # High variance (maps to 0)
+
+    # Consistency sub-weights (how to blend tempo vs offensive efficiency variance)
+    TEMPO_CONSISTENCY_WEIGHT = 0.40
+    OFF_EFF_CONSISTENCY_WEIGHT = 0.60
+
+    # Four Factors weights for composite display (Dean Oliver's values)
     OFF_WEIGHT = 0.52
     DEF_WEIGHT = 0.48
-
-    # Four Factors weights (Dean Oliver's approximate values)
-    EFG_WEIGHT = 0.40   # Shooting efficiency
-    TO_WEIGHT = 0.25    # Turnover rate
-    ORB_WEIGHT = 0.20   # Offensive rebounding
-    FTR_WEIGHT = 0.15   # Free throw rate
-
-    # Strength-of-schedule adjustment: blend raw composite with adj_net
-    RAW_COMPOSITE_WEIGHT = 0.33
-    ADJ_NET_WEIGHT = 0.40
-    ADJ_NET_FLOOR = -30.0   # adj_net normalization floor (maps to 0)
-    ADJ_NET_CEILING = 35.0  # adj_net normalization ceiling (maps to 100)
+    EFG_WEIGHT = 0.40
+    TO_WEIGHT = 0.25
+    ORB_WEIGHT = 0.20
+    FTR_WEIGHT = 0.15
 
     def calculate_offensive_composite(self, team: Dict) -> float | None:
         """
@@ -103,38 +119,71 @@ class RatingCalculator:
         return round(composite, 1)
 
     def calculate_raw_composite(self, off_composite: float, def_composite: float) -> float:
-        """Blend offensive and defensive composites (unadjusted for SOS)."""
+        """Blend offensive and defensive composites (for display purposes)."""
         return round(
             off_composite * self.OFF_WEIGHT + def_composite * self.DEF_WEIGHT,
             1
         )
 
-    def calculate_adjusted_composite(self, raw_composite: float, adj_net: float) -> float:
+    def calculate_consistency_score(self, tempo_var: float, off_eff_var: float) -> float:
         """
-        Blend raw four-factors composite with opponent-adjusted net rating.
+        Calculate consistency score from game-to-game variance.
 
-        This corrects for strength of schedule: teams with strong raw stats
-        against weak opponents get pulled toward their adj_net reality.
+        Lower variance = higher score (rewards consistent performance).
+        Blends tempo consistency (40%) and offensive efficiency consistency (60%).
         """
-        normalized_adj_net = _normalize(adj_net, self.ADJ_NET_FLOOR, self.ADJ_NET_CEILING)
+        # Invert: lower variance maps to higher score
+        tempo_score = _normalize(
+            self.TEMPO_VAR_CEILING - tempo_var,
+            0,
+            self.TEMPO_VAR_CEILING - self.TEMPO_VAR_FLOOR
+        )
+        off_eff_score = _normalize(
+            self.OFF_EFF_VAR_CEILING - off_eff_var,
+            0,
+            self.OFF_EFF_VAR_CEILING - self.OFF_EFF_VAR_FLOOR
+        )
+
         return round(
-            self.RAW_COMPOSITE_WEIGHT * raw_composite +
-            self.ADJ_NET_WEIGHT * normalized_adj_net,
+            tempo_score * self.TEMPO_CONSISTENCY_WEIGHT +
+            off_eff_score * self.OFF_EFF_CONSISTENCY_WEIGHT,
             1
         )
+
+    def calculate_overall_rating(self, adj_net: float, consistency_score: float = None) -> float:
+        """
+        Calculate overall rating: 90% adjusted efficiency margin + 10% consistency.
+
+        adj_net: Adjusted net rating (points per 100 possessions differential)
+        consistency_score: Score from 0-100 based on game-to-game variance
+        """
+        # Normalize adj_net to 0-100 scale
+        adj_net_normalized = _normalize(adj_net, self.ADJ_NET_FLOOR, self.ADJ_NET_CEILING)
+
+        if consistency_score is not None:
+            return round(
+                adj_net_normalized * self.ADJ_EFFICIENCY_WEIGHT +
+                consistency_score * self.CONSISTENCY_WEIGHT,
+                1
+            )
+        else:
+            # Fallback to just adj_net if no consistency data
+            return round(adj_net_normalized, 1)
 
     def process_teams(self, teams: List[Dict]) -> List[Dict]:
         """
         Calculate all ratings and rankings for every team.
 
+        Overall Rating = 90% Adjusted Efficiency Margin + 10% Consistency Component
+
         Adds to each team dict:
-          - off_composite, def_composite (four-factors sub-ratings)
-          - raw_composite (unadjusted four-factors blend)
-          - overall_composite (SOS-adjusted via adj_net blend)
-          - Ranks for composites and individual four factors
-          - The API's adjusted ratings are kept as-is (adj_off, adj_def, adj_net)
+          - overall_composite: Main rating (adj efficiency + consistency)
+          - consistency_score: Rewards lower variance in tempo and offensive efficiency
+          - off_composite, def_composite: Four-factors sub-ratings (for display)
+          - raw_composite: Unadjusted four-factors blend (for display)
+          - Ranks for all metrics
         """
-        # Phase 1: Calculate raw four-factors composites
+        # Phase 1: Calculate four-factors composites (for display/analysis)
         for team in teams:
             off_comp = self.calculate_offensive_composite(team)
             def_comp = self.calculate_defensive_composite(team)
@@ -147,18 +196,29 @@ class RatingCalculator:
             else:
                 team['raw_composite'] = None
 
-        # Phase 2: Apply SOS adjustment by blending with adj_net
+        # Phase 2: Calculate consistency score from game-level variance
         for team in teams:
-            raw = team.get('raw_composite')
-            adj_net = team.get('adj_net')
+            tempo_var = team.get('tempo_variance')
+            off_eff_var = team.get('off_eff_variance')
 
-            if raw is not None and adj_net is not None:
-                team['overall_composite'] = self.calculate_adjusted_composite(raw, adj_net)
+            if tempo_var is not None and off_eff_var is not None:
+                team['consistency_score'] = self.calculate_consistency_score(tempo_var, off_eff_var)
             else:
-                team['overall_composite'] = raw  # Fallback to raw if adj_net missing
+                team['consistency_score'] = None
 
-        # Rank by adjusted and raw composites
+        # Phase 3: Calculate overall rating (90% adj efficiency + 10% consistency)
+        for team in teams:
+            adj_net = team.get('adj_net')
+            consistency = team.get('consistency_score')
+
+            if adj_net is not None:
+                team['overall_composite'] = self.calculate_overall_rating(adj_net, consistency)
+            else:
+                team['overall_composite'] = None
+
+        # Rank by overall and component ratings
         _add_rank(teams, 'overall_composite', 'overall_rank', reverse=True)
+        _add_rank(teams, 'consistency_score', 'consistency_rank', reverse=True)
         _add_rank(teams, 'raw_composite', 'raw_composite_rank', reverse=True)
         _add_rank(teams, 'off_composite', 'off_composite_rank', reverse=True)
         _add_rank(teams, 'def_composite', 'def_composite_rank', reverse=True)
@@ -176,6 +236,10 @@ class RatingCalculator:
 
         _add_rank(teams, 'pace', 'pace_rank', reverse=True)
         _add_rank(teams, 'srs', 'srs_rank', reverse=True)
+
+        # Rank variance metrics (lower is better for these)
+        _add_rank(teams, 'tempo_variance', 'tempo_var_rank', reverse=False)
+        _add_rank(teams, 'off_eff_variance', 'off_eff_var_rank', reverse=False)
 
         # Sort by overall composite descending
         teams.sort(key=lambda t: t.get('overall_composite') or -999, reverse=True)
@@ -200,7 +264,7 @@ def _add_rank(teams: List[Dict], field: str, rank_field: str, reverse: bool) -> 
 
 
 if __name__ == "__main__":
-    # Quick test with sample data - includes a mid-major to verify SOS adjustment
+    # Quick test with sample data - includes variance for consistency component
     test_teams = [
         {
             'team': 'Duke', 'conference': 'ACC',
@@ -208,6 +272,7 @@ if __name__ == "__main__":
             'off_efg': 57.9, 'off_to_ratio': 0.14, 'off_orb': 27.9, 'off_ftr': 32.9,
             'def_efg': 44.4, 'def_to_ratio': 0.17, 'def_orb': 33.3, 'def_ftr': 25.0,
             'pace': 65.7, 'srs': 22.2,
+            'tempo_variance': 3.5, 'off_eff_variance': 8.2,  # Consistent team
         },
         {
             'team': 'Auburn', 'conference': 'SEC',
@@ -215,6 +280,7 @@ if __name__ == "__main__":
             'off_efg': 53.5, 'off_to_ratio': 0.16, 'off_orb': 33.0, 'off_ftr': 37.0,
             'def_efg': 46.0, 'def_to_ratio': 0.20, 'def_orb': 28.0, 'def_ftr': 30.0,
             'pace': 68.0, 'srs': 18.0,
+            'tempo_variance': 5.2, 'off_eff_variance': 12.5,  # More variable
         },
         {
             'team': 'UC San Diego', 'conference': 'Big West',
@@ -222,6 +288,7 @@ if __name__ == "__main__":
             'off_efg': 55.5, 'off_to_ratio': 0.14, 'off_orb': 26.8, 'off_ftr': 32.2,
             'def_efg': 47.0, 'def_to_ratio': 0.25, 'def_orb': 27.6, 'def_ftr': 29.0,
             'pace': 63.1, 'srs': 12.4,
+            'tempo_variance': 2.8, 'off_eff_variance': 6.5,  # Very consistent
         },
         {
             'team': 'South Alabama', 'conference': 'Sun Belt',
@@ -229,16 +296,22 @@ if __name__ == "__main__":
             'off_efg': 53.7, 'off_to_ratio': 0.15, 'off_orb': 33.3, 'off_ftr': 39.1,
             'def_efg': 47.3, 'def_to_ratio': 0.22, 'def_orb': 27.2, 'def_ftr': 26.0,
             'pace': 64.5, 'srs': 3.8,
+            'tempo_variance': 7.1, 'off_eff_variance': 15.3,  # Inconsistent team
         },
     ]
 
     calc = RatingCalculator()
     rated = calc.process_teams(test_teams)
 
+    print("=" * 70)
+    print("NEW RATING SYSTEM: 90% Adj Efficiency Margin + 10% Consistency")
+    print("=" * 70)
+
     for team in rated:
         print(f"\n{team['team']} ({team['conference']}):")
-        print(f"  Off composite:    {team['off_composite']} (rank {team.get('off_composite_rank')})")
-        print(f"  Def composite:    {team['def_composite']} (rank {team.get('def_composite_rank')})")
-        print(f"  Raw composite:    {team['raw_composite']} (rank {team.get('raw_composite_rank')}) [unadjusted]")
-        print(f"  Overall adjusted: {team['overall_composite']} (rank {team.get('overall_rank')}) [SOS-adjusted]")
-        print(f"  Adj Net Rating:   {team['adj_net']} (from API)")
+        print(f"  OVERALL RATING:   {team['overall_composite']} (rank #{team.get('overall_rank')})")
+        print(f"  ├─ Adj Net:       {team['adj_net']:+.1f} (90% weight)")
+        print(f"  └─ Consistency:   {team['consistency_score']} (10% weight, rank #{team.get('consistency_rank')})")
+        print(f"      ├─ Tempo σ:   {team['tempo_variance']} (rank #{team.get('tempo_var_rank')})")
+        print(f"      └─ Off Eff σ: {team['off_eff_variance']} (rank #{team.get('off_eff_var_rank')})")
+        print(f"  Four Factors:     Off {team['off_composite']} | Def {team['def_composite']} | Raw {team['raw_composite']}")

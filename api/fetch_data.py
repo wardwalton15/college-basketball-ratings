@@ -5,6 +5,7 @@ Fetches data from CollegeBasketballData.com API (api.collegebasketballdata.com)
 
 import os
 import time
+import statistics
 from typing import Dict, List, Optional
 import requests
 from dotenv import load_dotenv
@@ -105,6 +106,43 @@ class CBBDataFetcher:
         print(f"  Got {len(data)} teams")
         return data or []
 
+    def fetch_game_stats(self, season: int = 2026, team: str = None) -> List[Dict]:
+        """
+        Fetch game-by-game stats for teams.
+
+        Endpoint: /games/teams
+        Returns individual game records with:
+          - pace, teamStats.possessions, teamStats.rating (offensive efficiency)
+          - Full box score stats for possession calculation
+        """
+        params = {'season': season}
+        if team:
+            params['team'] = team
+        data = self._make_request('/games/teams', params=params, retries=3)
+        return data or []
+
+    def fetch_all_game_stats(self, season: int = 2026, teams: List[str] = None) -> Dict[str, List[Dict]]:
+        """
+        Fetch game-by-game stats for all teams.
+
+        Returns a dict mapping team name -> list of game records.
+        """
+        print(f"Fetching game-by-game stats for {season}...")
+        all_games = self.fetch_game_stats(season)
+        print(f"  Got {len(all_games)} game records total")
+
+        # Group by team
+        games_by_team = {}
+        for game in all_games:
+            team_name = game.get('team')
+            if team_name:
+                if team_name not in games_by_team:
+                    games_by_team[team_name] = []
+                games_by_team[team_name].append(game)
+
+        print(f"  Grouped into {len(games_by_team)} teams")
+        return games_by_team
+
     def fetch_all(self, season: int = 2026) -> Dict[str, List[Dict]]:
         """Fetch all data sources needed for team ratings."""
         print(f"\n{'='*50}")
@@ -116,6 +154,7 @@ class CBBDataFetcher:
             'team_stats': self.fetch_team_stats(season),
             'srs': self.fetch_srs_ratings(season),
             'team_info': self.fetch_team_info(),
+            'game_stats': self.fetch_all_game_stats(season),
         }
 
     def build_team_records(self, data: Dict[str, List[Dict]], season: int = 2026) -> List[Dict]:
@@ -123,12 +162,13 @@ class CBBDataFetcher:
         Merge all data sources into unified team records.
 
         Uses adjusted ratings as the canonical list of D-I teams (~364),
-        then joins team stats, SRS, and branding info by team name.
+        then joins team stats, SRS, branding info, and game-level variance by team name.
         """
         adjusted = data.get('adjusted', [])
         team_stats = data.get('team_stats', [])
         srs = data.get('srs', [])
         team_info = data.get('team_info', [])
+        game_stats = data.get('game_stats', {})  # Dict[team_name, List[game]]
 
         # Build lookup maps
         stats_map = {t['team']: t for t in team_stats if t.get('team')}
@@ -148,6 +188,10 @@ class CBBDataFetcher:
 
             off_ff = (stats.get('teamStats') or {}).get('fourFactors') or {}
             def_ff = (stats.get('opponentStats') or {}).get('fourFactors') or {}
+
+            # Calculate game-level variance for consistency component
+            team_games = game_stats.get(name, [])
+            tempo_variance, off_eff_variance = self._calculate_game_variance(team_games)
 
             teams.append({
                 'team': name,
@@ -187,6 +231,10 @@ class CBBDataFetcher:
                 # SRS
                 'srs': srs_data.get('rating'),
 
+                # Game-level variance (for consistency component)
+                'tempo_variance': tempo_variance,
+                'off_eff_variance': off_eff_variance,
+
                 # Branding
                 'primary_color': info.get('primaryColor'),
                 'secondary_color': info.get('secondaryColor'),
@@ -201,7 +249,64 @@ class CBBDataFetcher:
         if missing_stats:
             print(f"  {len(missing_stats)} teams missing four factors data")
 
+        # Report teams with variance data
+        with_variance = sum(1 for t in teams if t['tempo_variance'] is not None)
+        print(f"  {with_variance} teams with game-level variance data")
+
         return teams
+
+    def _calculate_game_variance(self, games: List[Dict]) -> tuple:
+        """
+        Calculate variance in tempo and offensive efficiency across games.
+
+        Uses Dean Oliver's possession formula:
+        Possessions = 0.96 * [(FGA) + (TO) + 0.44*(FTA) - (ORB)]
+
+        Returns (tempo_variance, off_eff_variance) or (None, None) if insufficient data.
+        """
+        if len(games) < 3:  # Need at least 3 games for meaningful variance
+            return None, None
+
+        tempos = []
+        off_effs = []
+
+        for game in games:
+            team_stats = game.get('teamStats') or {}
+
+            # Get box score components for possession calculation
+            fg_attempted = (team_stats.get('fieldGoals') or {}).get('attempted')
+            turnovers = (team_stats.get('turnovers') or {}).get('total', 0)
+            ft_attempted = (team_stats.get('freeThrows') or {}).get('attempted')
+            off_rebounds = (team_stats.get('rebounds') or {}).get('offensive')
+            points = (team_stats.get('points') or {}).get('total')
+            game_minutes = game.get('gameMinutes', 40)
+
+            # Skip games with missing data
+            if any(v is None for v in [fg_attempted, ft_attempted, off_rebounds, points]):
+                continue
+
+            # Dean Oliver possession formula
+            possessions = 0.96 * (fg_attempted + turnovers + 0.44 * ft_attempted - off_rebounds)
+
+            if possessions > 0:
+                # Tempo: possessions per 40 minutes
+                tempo = possessions * (40 / game_minutes) if game_minutes > 0 else possessions
+                tempos.append(tempo)
+
+                # Offensive efficiency: points per 100 possessions
+                off_eff = (points / possessions) * 100
+                off_effs.append(off_eff)
+
+        # Need at least 3 valid games
+        if len(tempos) < 3:
+            return None, None
+
+        try:
+            tempo_var = statistics.stdev(tempos)
+            off_eff_var = statistics.stdev(off_effs)
+            return round(tempo_var, 2), round(off_eff_var, 2)
+        except statistics.StatisticsError:
+            return None, None
 
 
 if __name__ == "__main__":

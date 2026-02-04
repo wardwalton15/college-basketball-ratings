@@ -118,30 +118,62 @@ def refresh_data():
                 'wins': team.get('wins'),
                 'losses': team.get('losses'),
                 'games': team.get('games'),
+
+                # Main rating (90% adj efficiency + 10% consistency)
                 'overall_composite': team.get('overall_composite'),
+                'overall_rank': team.get('overall_rank'),
+
+                # Consistency component
+                'consistency_score': team.get('consistency_score'),
+                'consistency_rank': team.get('consistency_rank'),
+                'tempo_variance': team.get('tempo_variance'),
+                'tempo_var_rank': team.get('tempo_var_rank'),
+                'off_eff_variance': team.get('off_eff_variance'),
+                'off_eff_var_rank': team.get('off_eff_var_rank'),
+
+                # Four factors composites
                 'raw_composite': team.get('raw_composite'),
+                'raw_composite_rank': team.get('raw_composite_rank'),
                 'off_composite': team.get('off_composite'),
+                'off_composite_rank': team.get('off_composite_rank'),
                 'def_composite': team.get('def_composite'),
+                'def_composite_rank': team.get('def_composite_rank'),
+
+                # Adjusted efficiency
                 'adj_off': team.get('adj_off'),
                 'adj_def': team.get('adj_def'),
                 'adj_net': team.get('adj_net'),
-                'overall_rank': team.get('overall_rank'),
-                'raw_composite_rank': team.get('raw_composite_rank'),
-                'off_composite_rank': team.get('off_composite_rank'),
-                'def_composite_rank': team.get('def_composite_rank'),
                 'rank_off': team.get('rank_off'),
                 'rank_def': team.get('rank_def'),
                 'rank_net': team.get('rank_net'),
+
+                # Offensive four factors
                 'off_efg': team.get('off_efg'),
+                'off_efg_rank': team.get('off_efg_rank'),
                 'off_to_ratio': team.get('off_to_ratio'),
+                'off_to_rank': team.get('off_to_rank'),
                 'off_orb': team.get('off_orb'),
+                'off_orb_rank': team.get('off_orb_rank'),
                 'off_ftr': team.get('off_ftr'),
+                'off_ftr_rank': team.get('off_ftr_rank'),
+
+                # Defensive four factors
                 'def_efg': team.get('def_efg'),
+                'def_efg_rank': team.get('def_efg_rank'),
                 'def_to_ratio': team.get('def_to_ratio'),
+                'def_to_rank': team.get('def_to_rank'),
                 'def_orb': team.get('def_orb'),
+                'def_orb_rank': team.get('def_orb_rank'),
                 'def_ftr': team.get('def_ftr'),
+                'def_ftr_rank': team.get('def_ftr_rank'),
+
+                # Other metrics
                 'pace': team.get('pace'),
+                'pace_rank': team.get('pace_rank'),
                 'srs': team.get('srs'),
+                'srs_rank': team.get('srs_rank'),
+
+                # Branding
                 'primary_color': team.get('primary_color'),
                 'secondary_color': team.get('secondary_color'),
                 'logo_url': team.get('logo'),
